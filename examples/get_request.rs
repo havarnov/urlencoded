@@ -7,9 +7,9 @@ use iron::status;
 use urlencoded::UrlEncodedQuery;
 
 fn log_params(req: &mut Request) -> IronResult<Response> {
-    // Extract the decoded data as hashmap, using the UrlEncodedQuery plugin.
+    // Extract the decoded data as multimap, using the UrlEncodedQuery plugin.
     match req.get_ref::<UrlEncodedQuery>() {
-        Ok(ref hashmap) => println!("Parsed GET request query string:\n {:?}", hashmap),
+        Ok(ref multimap) => println!("Parsed POST request body:\n {:?}", multimap),
         Err(ref e) => println!("{:?}", e)
     };
 

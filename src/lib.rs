@@ -7,6 +7,7 @@ extern crate iron;
 extern crate bodyparser;
 extern crate url;
 extern crate plugin;
+extern crate multimap;
 
 use iron::prelude::*;
 use iron::typemap::Key;
@@ -14,10 +15,10 @@ use iron::typemap::Key;
 use plugin::Pluggable;
 
 use url::form_urlencoded;
-use std::collections::HashMap;
-use std::collections::hash_map::Entry::*;
 use std::fmt;
 use std::error::Error as StdError;
+
+use multimap::MultiMap;
 
 /// Plugin for `Request` that extracts URL encoded data from the URL query string.
 ///
@@ -68,8 +69,8 @@ impl StdError for UrlDecodingError {
     }
 }
 
-/// Hashmap mapping strings to vectors of strings.
-pub type QueryMap = HashMap<String, Vec<String>>;
+/// Multimap mapping strings to vectors of strings.
+pub type QueryMap = MultiMap<String, String>;
 /// Result type for decoding query parameters.
 pub type QueryResult = Result<QueryMap, UrlDecodingError>;
 
@@ -85,7 +86,7 @@ impl<'a, 'b> plugin::Plugin<Request<'a, 'b>> for UrlEncodedQuery {
 
     fn eval(req: &mut Request) -> QueryResult {
         match req.url.query {
-            Some(ref query) => create_param_hashmap(&query),
+            Some(ref query) => create_param_multimap(&query),
             None => Err(UrlDecodingError::EmptyQuery)
         }
     }
@@ -98,30 +99,24 @@ impl<'a, 'b> plugin::Plugin<Request<'a, 'b>> for UrlEncodedBody {
         req.get::<bodyparser::Raw>()
             .map(|x| x.unwrap_or("".to_string()))
             .map_err(|e| UrlDecodingError::BodyError(e))
-            .and_then(|x| create_param_hashmap(&x))
+            .and_then(|x| create_param_multimap(&x))
     }
 }
 
-/// Parse a urlencoded string into an optional HashMap.
-fn create_param_hashmap(data: &str) -> QueryResult {
+/// Parse a urlencoded string into an optional MultiMap.
+fn create_param_multimap(data: &str) -> QueryResult {
     match data {
         "" => Err(UrlDecodingError::EmptyQuery),
         _ => Ok(combine_duplicates(form_urlencoded::parse(data.as_bytes())))
     }
 }
 
-/// Convert a list of (key, value) pairs into a hashmap with vector values.
+/// Convert a list of (key, value) pairs into a multimap with vector values.
 fn combine_duplicates(q: Vec<(String, String)>) -> QueryMap {
-    let mut deduplicated: QueryMap = HashMap::new();
+    let mut deduplicated: QueryMap = MultiMap::new();
 
     for (k, v) in q.into_iter() {
-        match deduplicated.entry(k) {
-            // Already a Vec here, push onto it
-            Occupied(entry) => { entry.into_mut().push(v); },
-
-            // No value, create a one-element Vec.
-            Vacant(entry) => { entry.insert(vec![v]); },
-        };
+        deduplicated.insert(k, v);
     }
 
     deduplicated
@@ -133,9 +128,9 @@ fn test_combine_duplicates() {
                       ("band".to_string(), "temper trap".to_string()),
                       ("color".to_string(),"green".to_string())];
     let answer = combine_duplicates(my_vec);
-    let mut control = HashMap::new();
-    control.insert("band".to_string(),
-                   vec!["arctic monkeys".to_string(), "temper trap".to_string()]);
-    control.insert("color".to_string(), vec!["green".to_string()]);
+    let mut control = MultiMap::new();
+    control.insert("band".to_string(), "arctic monkeys".to_string());
+    control.insert("band".to_string(), "temper trap".to_string());
+    control.insert("color".to_string(), "green".to_string());
     assert_eq!(answer, control);
 }
